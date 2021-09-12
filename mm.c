@@ -35,6 +35,7 @@ team_t team = {
 
 static char *heap_listp;
 static char *heap_end;
+static void *old_bp;
 
 static void *find_fit(size_t asize){
     void *bp;
@@ -51,21 +52,36 @@ static void *find_fit(size_t asize){
     // }
     
     //best fit
-    for (bp = heap_listp; bp < heap_end; bp = NEXT_BLKP(bp)){
-        //printf("bp: %p  heap end : %p\n", bp,heap_end);
-        if((!GET_ALLOC(HDRP(bp))) && (asize == GET_SIZE(HDRP(bp)))){
-            //printf("bp: %p : %p\n",bp, NEXT_BLKP(heap_listp));
-            return bp;}
-        else if (!GET_ALLOC(HDRP(bp)) && (asize < GET_SIZE(HDRP(bp))) && (best > GET_SIZE(HDRP(bp))) ){
-            find = bp;
-            best = GET_SIZE(HDRP(bp));
-        }
-    }
+    // for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)){
+    //     //printf("bp: %p  heap end : %p\n", bp,heap_end);
+    //     // if((!GET_ALLOC(HDRP(bp))) && (asize == GET_SIZE(HDRP(bp)))){
+    //     //     //printf("bp: %p : %p\n",bp, NEXT_BLKP(heap_listp));
+    //     //     return bp;}
+    //     if (!GET_ALLOC(HDRP(bp)) && (asize < GET_SIZE(HDRP(bp))) && (best > GET_SIZE(HDRP(bp))) ){
+    //         find = bp;
+    //         best = GET_SIZE(HDRP(bp));
+    //     }
+    // }
     
-    if (find != NULL){
-        //printf("bp: %p   find : %p\n", bp, find);
-        return find;
-    }
+    // if (find != NULL){
+    //     //printf("bp: %p   find : %p\n", bp, find);
+    //     return find;
+    // }
+
+    //next fit
+    // for (bp = old_bp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+    //         //printf("bp: %p oldbp : %p\n",bp, old_bp);
+    //         return bp;
+    //     }
+    // }
+    // for (bp = heap_listp; bp <= old_bp; bp = NEXT_BLKP(bp)) {
+    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+    //         //printf("heaplist: %p bp: %p : heapsize : %p\n",heap_listp, bp, GET_ALLOC(last_heap+4));
+    //         return bp;
+    //     }
+    // }
+    
     return NULL;
 }
 
@@ -96,6 +112,7 @@ static void *coalesce(void *bp)
 
     if (prev_alloc && next_alloc)
     {
+        //old_bp = bp;
         return bp;
     }
 
@@ -122,6 +139,7 @@ static void *coalesce(void *bp)
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
+    old_bp = bp;
     return bp;
 }
 
@@ -151,6 +169,7 @@ int mm_init(void)
     PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1));
     PUT(heap_listp + (3 * WSIZE), PACK(0, 1));
     heap_listp += (2 * WSIZE);
+    old_bp = heap_listp;
     
 
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
@@ -168,7 +187,7 @@ void *mm_malloc(size_t size)
     size_t asize;
     size_t extendsize;
     char *bp;
-    heap_end = mem_heap_hi();
+    //heap_end = mem_heap_hi();
     
     if (size <= DSIZE)
         asize = 2 * DSIZE;
@@ -177,6 +196,7 @@ void *mm_malloc(size_t size)
     
     if ((bp = find_fit(asize)) != NULL)
     {
+        old_bp = bp;
         place(bp, asize);
         return bp;
     }
@@ -185,6 +205,7 @@ void *mm_malloc(size_t size)
     if ((bp = extend_heap(extendsize / WSIZE)) == NULL)
         return NULL;
     place(bp, asize);
+    old_bp = bp;
     return bp;
 }
 
