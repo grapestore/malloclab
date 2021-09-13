@@ -36,9 +36,13 @@ typedef struct {
 
 #define HDRP(bp)             ((char *)(bp) - WSIZE)
 #define FTRP(bp)             ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
+#define PREC_FREEP(bp)       (*(void**)(bp))          
+#define SUCC_FREEP(bp)       (*(void**)(bp + WSIZE))
 
 #define NEXT_BLKP(bp)        ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)        ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
+
+
 
 extern team_t team;
 
