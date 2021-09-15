@@ -10,9 +10,9 @@
 
 team_t team = {
     
-    "inkyu",
+    "ateam",
     
-    "inkyu",
+    "Harry Bovik",
     
     "bovik@cs.cmu.edu",
     
@@ -22,7 +22,7 @@ team_t team = {
 
 
 // Global var
-void *segregated_free_lists[1]; 
+void *segregated_free_lists[LISTLIMIT]; 
 
 
 // Functions
@@ -52,14 +52,19 @@ static void *extend_heap(size_t size)
 }
 
 static void insert_node(void *ptr, size_t size) {
-
+    int list = 0;
     size_t csize = size;
     void *search_ptr = ptr;
     void *insert_ptr = NULL;
     
+    // Select segregated list 
+    while ((list < LISTLIMIT - 1) && (size > 1)) {
+        size >>= 1;
+        list++;
+    }
     
     // Keep size ascending order and search
-    search_ptr = segregated_free_lists[0];
+    search_ptr = segregated_free_lists[list];
     while ((search_ptr != NULL) && (csize > GET_SIZE(HDRP(search_ptr)))) {
         insert_ptr = search_ptr;
         search_ptr = SUCC(search_ptr);
@@ -76,7 +81,7 @@ static void insert_node(void *ptr, size_t size) {
             SET_PTR(SUCC_PTR(ptr), search_ptr);
             SET_PTR(PRED_PTR(search_ptr), ptr);
             SET_PTR(PRED_PTR(ptr), NULL);
-            segregated_free_lists[0] = ptr;
+            segregated_free_lists[list] = ptr;
         }
     } else {
         if (insert_ptr != NULL) {
@@ -86,7 +91,7 @@ static void insert_node(void *ptr, size_t size) {
         } else {
             SET_PTR(SUCC_PTR(ptr), NULL);
             SET_PTR(PRED_PTR(ptr), NULL);
-            segregated_free_lists[0] = ptr;
+            segregated_free_lists[list] = ptr;
         }
     }
     
@@ -95,21 +100,28 @@ static void insert_node(void *ptr, size_t size) {
 
 
 static void delete_node(void *ptr) {
+    int list = 0;
+    size_t size = GET_SIZE(HDRP(ptr));
     
-
+    // Select segregated list 
+    while ((list < LISTLIMIT - 1) && (size > 1)) {
+        size >>= 1;
+        list++;
+    }
+    
     if (SUCC(ptr) != NULL) {
         if (PRED(ptr) != NULL) {
             SET_PTR(PRED_PTR(SUCC(ptr)), PRED(ptr));
             SET_PTR(SUCC_PTR(PRED(ptr)), SUCC(ptr));
         } else {
             SET_PTR(PRED_PTR(SUCC(ptr)), NULL);
-            segregated_free_lists[0] = SUCC(ptr);
+            segregated_free_lists[list] = SUCC(ptr);
         }
     } else {
         if (PRED(ptr) != NULL) {
             SET_PTR(SUCC_PTR(PRED(ptr)), NULL);
         } else {
-            segregated_free_lists[0] = NULL;
+            segregated_free_lists[list] = NULL;
         }
     }
     
@@ -212,8 +224,14 @@ static void *place(void *ptr, size_t asize)
  * Return value : -1 if there was a problem, 0 otherwise.
  */
 int mm_init(void)
-{        
+{
+    int list;         
     char *heap_start; // Pointer to beginning of heap
+    
+    // Initialize segregated free lists
+    for (list = 0; list < LISTLIMIT; list++) {
+        segregated_free_lists[list] = NULL;
+    }
     
     // Allocate memory for the initial empty heap 
     if ((long)(heap_start = mem_sbrk(4 * WSIZE)) == -1)
@@ -223,7 +241,7 @@ int mm_init(void)
     PUT_NOTAG(heap_start + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue header */
     PUT_NOTAG(heap_start + (2 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
     PUT_NOTAG(heap_start + (3 * WSIZE), PACK(0, 1));     /* Epilogue header */
-    segregated_free_lists[0] = NULL;
+    
     if (extend_heap(INITCHUNKSIZE) == NULL)
         return -1;
     
@@ -258,18 +276,25 @@ void *mm_malloc(size_t size)
         asize = ALIGN(size+DSIZE);
     }
     
+    int list = 0; 
+    size_t searchsize = asize;
     // Search for free block in segregated list
-
+    while (list < LISTLIMIT) {
+        if ((list == LISTLIMIT - 1) || ((searchsize <= 1) && (segregated_free_lists[list] != NULL))) {
+            ptr = segregated_free_lists[list];
+            // Ignore blocks that are too small or marked with the reallocation bit
+            while ((ptr != NULL) && ((asize > GET_SIZE(HDRP(ptr))) || (GET_TAG(HDRP(ptr)))))
+            {
+                ptr = SUCC(ptr);
+            }
+            if (ptr != NULL)
+                break;
+        }
         
-    ptr = segregated_free_lists[0];
-    
-    // Ignore blocks that are too small or marked with the reallocation bit
-    
-    while ((ptr != NULL) && ((asize > GET_SIZE(HDRP(ptr))) || (GET_TAG(HDRP(ptr)))))
-    {
-        ptr = SUCC(ptr);
+        searchsize >>= 1;
+        list++;
     }
-
+    
     // if free block is not found, extend the heap
     if (ptr == NULL) {
         extendsize = MAX(asize, CHUNKSIZE);
