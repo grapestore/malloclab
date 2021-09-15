@@ -47,13 +47,13 @@ static void *extend_heap(size_t size)
     PUT_NOTAG(HDRP(ptr), PACK(asize, 0));  
     PUT_NOTAG(FTRP(ptr), PACK(asize, 0));   
     PUT_NOTAG(HDRP(NEXT_BLKP(ptr)), PACK(0, 1)); 
-    insert_node(ptr, asize);
 
     return coalesce(ptr);
 }
 
 static void insert_node(void *ptr, size_t size) {
     int list = 0;
+    size_t csize = size;
     void *search_ptr = ptr;
     void *insert_ptr = NULL;
     
@@ -65,32 +65,32 @@ static void insert_node(void *ptr, size_t size) {
     
     // Keep size ascending order and search
     search_ptr = segregated_free_lists[list];
-    while ((search_ptr != NULL) && (size > GET_SIZE(HDRP(search_ptr)))) {
+    while ((search_ptr != NULL) && (csize > GET_SIZE(HDRP(search_ptr)))) {
         insert_ptr = search_ptr;
-        search_ptr = PRED(search_ptr);
+        search_ptr = SUCC(search_ptr);
     }
     
-    // Set predecessor and successor 
+    // Set SUCCecessor and PREDessor 
     if (search_ptr != NULL) {
         if (insert_ptr != NULL) {
-            SET_PTR(PRED_PTR(ptr), search_ptr);
-            SET_PTR(SUCC_PTR(search_ptr), ptr);
-            SET_PTR(SUCC_PTR(ptr), insert_ptr);
-            SET_PTR(PRED_PTR(insert_ptr), ptr);
+            SET_PTR(SUCC_PTR(ptr), search_ptr);
+            SET_PTR(PRED_PTR(search_ptr), ptr);
+            SET_PTR(PRED_PTR(ptr), insert_ptr);
+            SET_PTR(SUCC_PTR(insert_ptr), ptr);
         } else {
-            SET_PTR(PRED_PTR(ptr), search_ptr);
-            SET_PTR(SUCC_PTR(search_ptr), ptr);
-            SET_PTR(SUCC_PTR(ptr), NULL);
+            SET_PTR(SUCC_PTR(ptr), search_ptr);
+            SET_PTR(PRED_PTR(search_ptr), ptr);
+            SET_PTR(PRED_PTR(ptr), NULL);
             segregated_free_lists[list] = ptr;
         }
     } else {
         if (insert_ptr != NULL) {
-            SET_PTR(PRED_PTR(ptr), NULL);
-            SET_PTR(SUCC_PTR(ptr), insert_ptr);
-            SET_PTR(PRED_PTR(insert_ptr), ptr);
-        } else {
-            SET_PTR(PRED_PTR(ptr), NULL);
             SET_PTR(SUCC_PTR(ptr), NULL);
+            SET_PTR(PRED_PTR(ptr), insert_ptr);
+            SET_PTR(SUCC_PTR(insert_ptr), ptr);
+        } else {
+            SET_PTR(SUCC_PTR(ptr), NULL);
+            SET_PTR(PRED_PTR(ptr), NULL);
             segregated_free_lists[list] = ptr;
         }
     }
@@ -109,17 +109,17 @@ static void delete_node(void *ptr) {
         list++;
     }
     
-    if (PRED(ptr) != NULL) {
-        if (SUCC(ptr) != NULL) {
-            SET_PTR(SUCC_PTR(PRED(ptr)), SUCC(ptr));
+    if (SUCC(ptr) != NULL) {
+        if (PRED(ptr) != NULL) {
             SET_PTR(PRED_PTR(SUCC(ptr)), PRED(ptr));
+            SET_PTR(SUCC_PTR(PRED(ptr)), SUCC(ptr));
         } else {
-            SET_PTR(SUCC_PTR(PRED(ptr)), NULL);
-            segregated_free_lists[list] = PRED(ptr);
+            SET_PTR(PRED_PTR(SUCC(ptr)), NULL);
+            segregated_free_lists[list] = SUCC(ptr);
         }
     } else {
-        if (SUCC(ptr) != NULL) {
-            SET_PTR(PRED_PTR(SUCC(ptr)), NULL);
+        if (PRED(ptr) != NULL) {
+            SET_PTR(SUCC_PTR(PRED(ptr)), NULL);
         } else {
             segregated_free_lists[list] = NULL;
         }
@@ -140,24 +140,23 @@ static void *coalesce(void *ptr)
     if (GET_TAG(HDRP(PREV_BLKP(ptr))))
         prev_alloc = 1;
 
-    if (prev_alloc && next_alloc) {                         // Case 1
-        return ptr;
-    }
-    else if (prev_alloc && !next_alloc) {                   // Case 2
-        delete_node(ptr);
+    if (prev_alloc && !next_alloc) {                   // Case 2
+        
         delete_node(NEXT_BLKP(ptr));
         size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         PUT(HDRP(ptr), PACK(size, 0));
         PUT(FTRP(ptr), PACK(size, 0));
+
     } else if (!prev_alloc && next_alloc) {                 // Case 3 
-        delete_node(ptr);
+        
         delete_node(PREV_BLKP(ptr));
         size += GET_SIZE(HDRP(PREV_BLKP(ptr)));
         PUT(FTRP(ptr), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(ptr)), PACK(size, 0));
         ptr = PREV_BLKP(ptr);
-    } else {                                                // Case 4
-        delete_node(ptr);
+
+    } else if(!prev_alloc && !next_alloc) {                                                // Case 4
+        
         delete_node(PREV_BLKP(ptr));
         delete_node(NEXT_BLKP(ptr));
         size += GET_SIZE(HDRP(PREV_BLKP(ptr))) + GET_SIZE(HDRP(NEXT_BLKP(ptr)));
@@ -286,7 +285,7 @@ void *mm_malloc(size_t size)
             // Ignore blocks that are too small or marked with the reallocation bit
             while ((ptr != NULL) && ((asize > GET_SIZE(HDRP(ptr))) || (GET_TAG(HDRP(ptr)))))
             {
-                ptr = PRED(ptr);
+                ptr = SUCC(ptr);
             }
             if (ptr != NULL)
                 break;
@@ -327,7 +326,7 @@ void mm_free(void *ptr)
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
     
-    insert_node(ptr, size);
+    
     coalesce(ptr);
     
     return;
